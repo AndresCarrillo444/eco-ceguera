@@ -23,6 +23,13 @@ _music_cache  = {}          # state → pygame.Sound  (pre-generated loops)
 _music_ch     = None        # dedicated pygame.Channel for background music
 _current_state = 'none'     # last state passed to music_set_state()
 
+#  Heartbeat state
+_hb_ch       = None    # Channel 13 (dedicated heartbeat)
+_hb_sound    = None    # Pre-generated lub-dub
+_hb_timer    = 60      # Frames until next beat
+_hb_interval = 60      # Target frames between beats (60fps → 60 BPM)
+_hb_active   = False   # Whether heartbeat is currently enabled
+
 #  Waveform helpers 
 
 def _t(n):
@@ -263,6 +270,20 @@ def _build_sfx():
     return c
 
 
+def _make_heartbeat():
+    """Generate a lub-dub heartbeat sound."""
+    if not _HAS_NP:
+        return None
+    n_lub = int(_SR * 0.085)
+    lub   = (_sine(75, n_lub) * 0.6 + _sine(50, n_lub) * 0.3) * \
+            np.exp(-np.linspace(0, 9, n_lub))
+    gap   = np.zeros(int(_SR * 0.09))
+    n_dub = int(_SR * 0.065)
+    dub   = (_sine(55, n_dub) * 0.45 + _sine(38, n_dub) * 0.25) * \
+            np.exp(-np.linspace(0, 11, n_dub))
+    return np.clip(np.concatenate([lub, gap, dub]), -1, 1)
+
+
 #  Public API 
 
 def audio_init():
@@ -270,7 +291,7 @@ def audio_init():
     Initialize pygame mixer, pre-generate ALL SFX and music loops.
     Call once after pygame.init(). Safe to call even if numpy is missing.
     """
-    global _READY, _sfx_cache, _music_cache, _music_ch
+    global _READY, _sfx_cache, _music_cache, _music_ch, _hb_ch, _hb_sound, _hb_timer
     if not (_HAS_NP and _HAS_PG):
         return
     try:
@@ -304,6 +325,14 @@ def audio_init():
 
     try:
         _music_ch = pygame.mixer.Channel(15)
+    except Exception:
+        pass
+    try:
+        _hb_ch    = pygame.mixer.Channel(13)
+        raw_hb    = _make_heartbeat()
+        if raw_hb is not None:
+            _hb_sound = _to_sound(raw_hb, 0.50)
+        _hb_timer = 60
     except Exception:
         pass
 
@@ -367,3 +396,30 @@ def sfx_set_volume(v):
     """Set SFX master volume (0.0–1.0)."""
     global _sfx_vol
     _sfx_vol = max(0.0, min(1.0, v))
+
+
+def heartbeat_set_bpm(bpm):
+    """Set heartbeat speed.  bpm <= 0 → stop heartbeat."""
+    global _hb_interval, _hb_active
+    if bpm <= 0:
+        _hb_active = False
+        return
+    _hb_active   = True
+    new_interval = max(6, int(60 * 60 / max(bpm, 1)))   # frames at 60 fps
+    if new_interval != _hb_interval:
+        _hb_interval = new_interval
+
+
+def heartbeat_tick():
+    """Call once per game frame. Fires the heartbeat sound on schedule."""
+    global _hb_timer
+    if not _READY or not _hb_active or _hb_sound is None or _hb_ch is None:
+        return
+    _hb_timer -= 1
+    if _hb_timer <= 0:
+        _hb_timer = _hb_interval
+        try:
+            _hb_sound.set_volume(max(0.0, min(1.0, _sfx_vol * 0.55)))
+            _hb_ch.play(_hb_sound)
+        except Exception:
+            pass

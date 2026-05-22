@@ -32,6 +32,7 @@ from eco_settings import (
     settings_load, settings_save, draw_settings_menu,
     custom_level_save, custom_level_load, custom_levels_list, custom_level_delete,
     draw_save_level_dialog,
+    level_to_code, code_to_level,
 )
 try:
     from eco_online_lb import ol_submit, ol_fetch_all, ol_fetch
@@ -44,6 +45,7 @@ try:
     from eco_audio import (
         audio_init, play_sfx, music_set_state, music_tick,
         music_set_volume, sfx_set_volume,
+        heartbeat_set_bpm, heartbeat_tick,
     )
     _HAS_AUDIO = True
 except Exception:
@@ -53,6 +55,8 @@ except Exception:
     def music_tick(): pass
     def music_set_volume(v): pass
     def sfx_set_volume(v): pass
+    def heartbeat_set_bpm(b): pass
+    def heartbeat_tick(): pass
     _HAS_AUDIO = False
 
 
@@ -94,56 +98,65 @@ LEVEL_CONFIGS = [
      'mat_metal': 0.10, 'mat_cork': 0.05, 'mat_mirror': 0.05,
      'reveal_dur': 110, 'sonar_radius': 320, 'micro_interval': 60, 'spd_mult': 0.8,
      'mechanic': None,
-     'n_mimic': 0, 'n_stalker': 0, 'n_water': 2, 'n_glass': 1, 'n_noise': 1, 'n_orbs': 3},
+     'n_mimic': 0, 'n_stalker': 0, 'n_water': 2, 'n_glass': 1, 'n_noise': 1, 'n_orbs': 3,
+     'n_void': 0, 'n_screamer': 0, 'n_phantom': 0},
     {'name': 'ECOS ROJOS',       'subtitle': 'El murciélago ha despertado',
      'n_normal': 3, 'bat': True,  'heavy': False, 'n_traps': 2,
      'mat_metal': 0.20, 'mat_cork': 0.15, 'mat_mirror': 0.08,
      'reveal_dur': 80, 'sonar_radius': 300, 'micro_interval': 50, 'spd_mult': 1.0,
      'mechanic': None,
-     'n_mimic': 1, 'n_stalker': 0, 'n_water': 3, 'n_glass': 2, 'n_noise': 1, 'n_orbs': 2},
+     'n_mimic': 1, 'n_stalker': 0, 'n_water': 3, 'n_glass': 2, 'n_noise': 1, 'n_orbs': 2,
+     'n_void': 0, 'n_screamer': 0, 'n_phantom': 0},
     {'name': 'CUENTA REGRESIVA', 'subtitle': 'La salida se cierra en 90 segundos',
      'n_normal': 3, 'bat': True,  'heavy': True,  'n_traps': 3,
      'mat_metal': 0.15, 'mat_cork': 0.30, 'mat_mirror': 0.10,
      'reveal_dur': 70, 'sonar_radius': 280, 'micro_interval': 45, 'spd_mult': 1.0,
      'mechanic': 'timer', 'timer_secs': 90,
-     'n_mimic': 1, 'n_stalker': 1, 'n_water': 3, 'n_glass': 2, 'n_noise': 2, 'n_orbs': 2},
+     'n_mimic': 1, 'n_stalker': 1, 'n_water': 3, 'n_glass': 2, 'n_noise': 2, 'n_orbs': 2,
+     'n_void': 1, 'n_screamer': 0, 'n_phantom': 0},
     {'name': 'CAMPO MINADO',     'subtitle': 'Las trampas se regeneran cada 15 s',
      'n_normal': 4, 'bat': True,  'heavy': True,  'n_traps': 10,
      'mat_metal': 0.25, 'mat_cork': 0.20, 'mat_mirror': 0.10,
      'reveal_dur': 60, 'sonar_radius': 260, 'micro_interval': 40, 'spd_mult': 1.2,
      'mechanic': 'respawn_traps', 'respawn_frames': 900,
-     'n_mimic': 2, 'n_stalker': 1, 'n_water': 4, 'n_glass': 3, 'n_noise': 2, 'n_orbs': 1},
+     'n_mimic': 2, 'n_stalker': 1, 'n_water': 4, 'n_glass': 3, 'n_noise': 2, 'n_orbs': 1,
+     'n_void': 1, 'n_screamer': 1, 'n_phantom': 0},
     {'name': 'EL ABISMO',        'subtitle': 'La oscuridad te consume cada 15 s',
      'n_normal': 5, 'bat': True,  'heavy': True,  'n_traps': 6,
      'mat_metal': 0.25, 'mat_cork': 0.25, 'mat_mirror': 0.12,
      'reveal_dur': 45, 'sonar_radius': 240, 'micro_interval': 35, 'spd_mult': 1.5,
      'mechanic': 'blackout', 'blackout_interval': 900,
-     'n_mimic': 2, 'n_stalker': 2, 'n_water': 5, 'n_glass': 3, 'n_noise': 3, 'n_orbs': 1},
+     'n_mimic': 2, 'n_stalker': 2, 'n_water': 5, 'n_glass': 3, 'n_noise': 3, 'n_orbs': 1,
+     'n_void': 2, 'n_screamer': 1, 'n_phantom': 1},
     # ── NEW LEVELS (showcasing new features) ────────────────────────────────
     {'name': 'EL ESPEJO ROTO',   'subtitle': 'El suelo traiciona cada paso',
      'n_normal': 3, 'bat': False, 'heavy': False, 'n_traps': 2,
      'mat_metal': 0.05, 'mat_cork': 0.05, 'mat_mirror': 0.30,
      'reveal_dur': 90, 'sonar_radius': 310, 'micro_interval': 55, 'spd_mult': 0.9,
      'mechanic': None,
-     'n_mimic': 0, 'n_stalker': 0, 'n_water': 6, 'n_glass': 5, 'n_noise': 3, 'n_orbs': 2},
+     'n_mimic': 0, 'n_stalker': 0, 'n_water': 6, 'n_glass': 5, 'n_noise': 3, 'n_orbs': 2,
+     'n_void': 1, 'n_screamer': 0, 'n_phantom': 1},
     {'name': 'SOMBRA SILENCIOSA','subtitle': 'No lo escucharás venir',
      'n_normal': 2, 'bat': False, 'heavy': False, 'n_traps': 1,
      'mat_metal': 0.15, 'mat_cork': 0.10, 'mat_mirror': 0.05,
      'reveal_dur': 85, 'sonar_radius': 290, 'micro_interval': 50, 'spd_mult': 1.0,
      'mechanic': None,
-     'n_mimic': 0, 'n_stalker': 3, 'n_water': 2, 'n_glass': 2, 'n_noise': 2, 'n_orbs': 2},
+     'n_mimic': 0, 'n_stalker': 3, 'n_water': 2, 'n_glass': 2, 'n_noise': 2, 'n_orbs': 2,
+     'n_void': 0, 'n_screamer': 0, 'n_phantom': 2},
     {'name': 'EL IMPOSTOR',      'subtitle': 'La salida no es lo que parece',
      'n_normal': 2, 'bat': True,  'heavy': False, 'n_traps': 2,
      'mat_metal': 0.15, 'mat_cork': 0.10, 'mat_mirror': 0.08,
      'reveal_dur': 75, 'sonar_radius': 280, 'micro_interval': 48, 'spd_mult': 1.1,
      'mechanic': None,
-     'n_mimic': 4, 'n_stalker': 1, 'n_water': 2, 'n_glass': 2, 'n_noise': 1, 'n_orbs': 2},
+     'n_mimic': 4, 'n_stalker': 1, 'n_water': 2, 'n_glass': 2, 'n_noise': 1, 'n_orbs': 2,
+     'n_void': 1, 'n_screamer': 1, 'n_phantom': 1},
     {'name': 'LA GALERIA',       'subtitle': 'Recoge los ecos antes de escapar',
      'n_normal': 4, 'bat': True,  'heavy': True,  'n_traps': 4,
      'mat_metal': 0.20, 'mat_cork': 0.20, 'mat_mirror': 0.10,
      'reveal_dur': 65, 'sonar_radius': 270, 'micro_interval': 42, 'spd_mult': 1.3,
      'mechanic': 'timer', 'timer_secs': 120,
-     'n_mimic': 2, 'n_stalker': 2, 'n_water': 4, 'n_glass': 3, 'n_noise': 3, 'n_orbs': 8},
+     'n_mimic': 2, 'n_stalker': 2, 'n_water': 4, 'n_glass': 3, 'n_noise': 3, 'n_orbs': 8,
+     'n_void': 2, 'n_screamer': 2, 'n_phantom': 2},
 ]
 N_LEVELS = len(LEVEL_CONFIGS)
 
@@ -158,6 +171,16 @@ HEAVY_RADIUS         = 18
 HEAVY_SPEED          = 0.45
 HEAVY_HEAR_RADIUS    = 280
 TRAP_PULSE_RADIUS    = 300
+HEARTBEAT_MIN = 180        # frames between heartbeat at low alert
+HEARTBEAT_MAX = 40         # frames between heartbeat at full chase
+CONE_ANGLE    = 40         # degrees half-angle for focused sonar
+CONE_RANGE    = 500        # max range of focused sonar
+ROCK_RANGE    = 350        # max throw range for rocks
+ABSORBER_DURATION   = 180        # frames sound absorber is active
+SHOCKWAVE_COOLDOWN     = 600    # 10 seconds at 60 fps
+VOID_SHADOW_RADIUS     = 20     # pixel radius of the absorption sphere
+PASSIVE_ECO_INTERVAL   = 30     # frames between passive eco micro-pulses
+PASSIVE_ECO_MAX_ENERGY = 300    # total frames of passive eco
 
 # Estados FSM de la IA
 STATE_PATROL     = 0
@@ -260,7 +283,7 @@ def _make_sound(freq=440, duration=0.08, vol=0.18, wave='sine', decay=True):
 # Pre-generar sonidos al inicio (se reusan cada frame)
 _snd_sonar  = None   
 _snd_mirror = None   
-_snd_trap   = None   
+_snd_trap   = None      
 _snd_win    = None   
 _snd_lose   = None   
 
@@ -328,7 +351,8 @@ class Wall:
 
 
 class SonarPulse:
-    def __init__(self, x, y, color=CYAN, is_decoy=False, catches_player=False, max_radius=SONAR_MAX_RADIUS):
+    def __init__(self, x, y, color=CYAN, is_decoy=False, catches_player=False,
+                 max_radius=SONAR_MAX_RADIUS, is_silent=False):
         self.x              = x
         self.y              = y
         self.radius         = 0
@@ -337,7 +361,43 @@ class SonarPulse:
         self.is_decoy       = is_decoy
         self.catches_player = catches_player
         self.max_radius     = max_radius
+        self.is_silent      = is_silent   # silent pulses never alert enemies
         self.revealed       = set()
+        self.blocked_arcs   = []          # acoustic shadow arcs: (min_ang, max_ang, dist)
+
+    # ── Acoustic shadow helpers ───────────────────────────────────────────────
+    def _shadow_arc_of_wall(self, w):
+        """Return (arc_min, arc_max, block_dist) for a shadow-casting wall, or None."""
+        if w.material not in (MAT_NORMAL, MAT_METAL):
+            return None
+        dx = w.rect.centerx - self.x
+        dy = w.rect.centery - self.y
+        d  = math.hypot(dx, dy)
+        if d < 1:
+            return None
+        centre_ang = math.atan2(dy, dx)
+        half_span  = math.atan2(TILE * 0.72, d)
+        return (centre_ang - half_span, centre_ang + half_span, d)
+
+    def _is_shadowed(self, tx, ty):
+        """True if (tx,ty) is behind an opaque wall relative to pulse origin."""
+        if not self.blocked_arcs:
+            return False
+        dx = tx - self.x
+        dy = ty - self.y
+        d  = math.hypot(dx, dy)
+        if d < 2:
+            return False
+        TWO_PI = 2 * math.pi
+        a      = math.atan2(dy, dx) % TWO_PI
+        for arc_min, arc_max, block_dist in self.blocked_arcs:
+            if d > block_dist:
+                mn = arc_min % TWO_PI
+                mx = arc_max % TWO_PI
+                in_arc = (mn <= a <= mx) if mn <= mx else (a >= mn or a <= mx)
+                if in_arc:
+                    return True
+        return False
 
     def update(self, walls, enemies, exit_rect, player):
         self.radius += SONAR_SPEED
@@ -390,6 +450,10 @@ class SonarPulse:
                         play_sfx("mirror")
                 else:
                     w.reveal = max(w.reveal, REVEAL_DURATION)
+                    # Acoustic shadow: opaque walls cast a shadow behind them
+                    arc = self._shadow_arc_of_wall(w)
+                    if arc:
+                        self.blocked_arcs.append(arc)
 
         # Revelar enemigos
         for e in enemies:
@@ -397,24 +461,26 @@ class SonarPulse:
                 continue
             d = dist((self.x, self.y), (e.x, e.y))
             if abs(d - self.radius) < SONAR_SPEED + 4:
-                e.reveal = REVEAL_DURATION
-                self.revealed.add(id(e))
-                if not self.is_decoy:
-                    e.alert(player.x, player.y)
+                if not self._is_shadowed(e.x, e.y):
+                    e.on_sonar_reveal()
+                    self.revealed.add(id(e))
+                    if not self.is_decoy and not self.is_silent:
+                        e.alert(player.x, player.y)
 
         # Revelar salida
         if exit_rect:
-            cx = max(exit_rect.rect.left, min(self.x, exit_rect.rect.right))
-            cy = max(exit_rect.rect.top,  min(self.y, exit_rect.rect.bottom))
-            if abs(dist((self.x, self.y), (cx, cy)) - self.radius) < SONAR_SPEED + 2:
-                exit_rect.revealed = REVEAL_DURATION
+            cx2 = max(exit_rect.rect.left, min(self.x, exit_rect.rect.right))
+            cy2 = max(exit_rect.rect.top,  min(self.y, exit_rect.rect.bottom))
+            if abs(dist((self.x, self.y), (cx2, cy2)) - self.radius) < SONAR_SPEED + 2:
+                if not self._is_shadowed(exit_rect.rect.centerx, exit_rect.rect.centery):
+                    exit_rect.revealed = REVEAL_DURATION
 
         # Murciélago: detectar si el pulso toca al jugador
         if self.catches_player:
             dp = dist((self.x, self.y), (player.x, player.y))
             if abs(dp - self.radius) < SONAR_SPEED + 6:
                 player.caught = True
-    
+
         return new_pulses
 
 
@@ -454,7 +520,9 @@ class Enemy:
         self.lost_timer  = 0
         self.sound_x     = x
         self.sound_y     = y
-        self.chase_timer = 0        
+        self.chase_timer = 0
+        self.stunned     = False   # True while hit by shockwave
+        self.stun_timer  = 0
         self._pick_patrol()
 
     def _pick_patrol(self):
@@ -477,7 +545,19 @@ class Enemy:
         self.alert_t    = ENEMY_ALERT_TIME
         self.speed      = ENEMY_ALERT_SPEED
         self.state      = STATE_INVESTIGATE
-        self.path_dirty = True     
+        self.path_dirty = True
+
+    def on_sonar_reveal(self):
+        """Called when a sonar pulse reveals this enemy."""
+        self.reveal = REVEAL_DURATION
+
+    def knockback(self, dx, dy, force):
+        """Apply a push and stun this enemy."""
+        push = force * 0.25
+        self.x += dx * push
+        self.y += dy * push
+        self.stunned    = True
+        self.stun_timer = 90
 
     def _follow_path(self):
         """Steer target_x/y toward next waypoint in self.path."""
@@ -492,6 +572,13 @@ class Enemy:
         return False
 
     def update(self, walls, player, all_enemies=None, wall_grid=None):
+        # Stun check: frozen while shockwave-hit
+        if self.stunned:
+            if self.reveal > 0: self.reveal -= 1
+            self.stun_timer -= 1
+            if self.stun_timer <= 0:
+                self.stunned = False
+            return None
         if self.reveal > 0:
             self.reveal -= 1
 
@@ -749,7 +836,11 @@ HEARTBEAT_MAX = 40         # frames between heartbeat at full chase
 CONE_ANGLE    = 40         # degrees half-angle for focused sonar
 CONE_RANGE    = 500        # max range of focused sonar
 ROCK_RANGE    = 350        # max throw range for rocks
-ABSORBER_DURATION = 180    # frames sound absorber is active
+ABSORBER_DURATION   = 180        # frames sound absorber is active
+SHOCKWAVE_COOLDOWN     = 600    # 10 seconds at 60 fps
+VOID_SHADOW_RADIUS     = 20     # pixel radius of the absorption sphere
+PASSIVE_ECO_INTERVAL   = 30     # frames between passive eco micro-pulses
+PASSIVE_ECO_MAX_ENERGY = 300    # total frames of passive eco
 
 
 class FloorHazard:
@@ -1007,6 +1098,10 @@ class MimicEnemy:
     def on_sonar_hit(self):
         self.revealed = REVEAL_DURATION
 
+    def on_sonar_reveal(self):
+        """SonarPulse compatibility: delegates to on_sonar_hit."""
+        self.on_sonar_hit()
+
     def draw(self, surf, offset):
         rx = int(self.cx - offset[0])
         ry = int(self.cy - offset[1])
@@ -1065,6 +1160,240 @@ class StalkerEnemy(Enemy):
             cy2 = int(self.y - offset[1])
             pygame.draw.circle(surf, col, (cx2, cy2), ENEMY_RADIUS)
             pygame.draw.circle(surf, (200, 100, 255), (cx2, cy2), ENEMY_RADIUS, 1)
+
+
+# ──────────────────── NEW ENTITIES ───────────────────────────────────────
+
+class VoidShadow:
+    """Stationary absorber. When the sonar front reaches it the pulse dies."""
+    def __init__(self, cx, cy):
+        self.cx     = cx
+        self.cy     = cy
+        self.x      = float(cx)
+        self.y      = float(cy)
+        self._tick  = random.randint(0, 60)
+        self.reveal = 0
+        self.alert_t = 0
+
+    def update(self):
+        self._tick += 1
+        if self.reveal > 0:
+            self.reveal -= 1
+
+    def check_pulse_absorption(self, pulse):
+        """Return True if pulse is absorbed (caller must set pulse.dead)."""
+        d = dist((pulse.x, pulse.y), (self.cx, self.cy))
+        if abs(d - pulse.radius) < SONAR_SPEED + VOID_SHADOW_RADIUS:
+            self.reveal = max(self.reveal, 20)
+            return True
+        return False
+
+    def draw(self, surf, offset):
+        if self.reveal <= 0:
+            return
+        alpha = min(1.0, self.reveal / 15)
+        rx = int(self.cx - offset[0])
+        ry = int(self.cy - offset[1])
+        r  = VOID_SHADOW_RADIUS
+        col = lerp_color(BLACK, (70, 0, 100), alpha)
+        pygame.draw.circle(surf, col, (rx, ry), r)
+        pygame.draw.circle(surf, lerp_color(BLACK, (160, 0, 220), alpha * 0.8), (rx, ry), r, 2)
+        pulse2 = math.sin(self._tick * 0.09) * 0.5 + 0.5
+        pygame.draw.circle(surf, lerp_color(BLACK, (200, 0, 255), alpha * pulse2 * 0.7),
+                           (rx, ry), max(1, r // 2))
+        for i in range(4):
+            ang = (self._tick * 0.06 + i * 1.57) % (2 * math.pi)
+            pr2 = int(r * 0.75)
+            pygame.draw.circle(surf, lerp_color(BLACK, (220, 0, 255), alpha * 0.6),
+                               (int(rx + math.cos(ang) * pr2), int(ry + math.sin(ang) * pr2)), 2)
+
+
+class ScreamerEnemy(Enemy):
+    """Slow, blind. When alerted emits a massive sonar that reveals the player
+    to ALL nearby enemies."""
+    COLOR          = (255, 215, 0)
+    SPEED_ROAMING  = 0.30
+    SCREAM_COOLDOWN = 300
+
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.speed      = self.SPEED_ROAMING
+        self._scream_cd = random.randint(0, 150)
+
+    def alert(self, tx, ty):
+        super().alert(tx, ty)
+        self.speed = self.SPEED_ROAMING
+
+    def update(self, walls, player, all_enemies=None, wall_grid=None):
+        result = super().update(walls, player, all_enemies, wall_grid)
+        if result is not None:
+            return result
+        if self._scream_cd > 0:
+            self._scream_cd -= 1
+        if self.alert_t > 0 and self._scream_cd <= 0:
+            self._scream_cd = self.SCREAM_COOLDOWN
+            return SonarPulse(self.x, self.y, color=(255, 200, 0),
+                              is_decoy=False, max_radius=500)
+        return None
+
+    def draw(self, surf, offset):
+        for i, (tx, ty) in (enumerate(self.trail)
+                            if cfg_settings.get('show_trail', True) else []):
+            t = (i + 1) / max(len(self.trail), 1)
+            b = int(t * 40)
+            if b > 5:
+                pygame.draw.circle(surf, (b, b // 2, 0),
+                                   (int(tx - offset[0]), int(ty - offset[1])),
+                                   max(1, int(t * 2.5)))
+        if self.reveal <= 0:
+            return
+        alpha = min(1.0, self.reveal / 20)
+        col   = lerp_color(BLACK, self.COLOR, alpha)
+        cx2   = int(self.x - offset[0])
+        cy2   = int(self.y - offset[1])
+        r     = ENEMY_RADIUS
+        pygame.draw.circle(surf, col, (cx2, cy2), r)
+        for i in range(8):
+            ang = i * math.pi / 4
+            pygame.draw.line(surf, col, (cx2, cy2),
+                             (int(cx2 + math.cos(ang) * (r + 5)),
+                              int(cy2 + math.sin(ang) * (r + 5))), 2)
+        pygame.draw.circle(surf, (255, 255, 100), (cx2, cy2), r, 2)
+        if self.alert_t > 0:
+            pygame.draw.circle(surf, self.COLOR, (cx2, cy2 - r - 6), 5)
+
+
+class PhantomEnemy(Enemy):
+    """Only appears as a faint afterimage at the outer edge of a sonar pulse.
+    The LONGER since it was hit, the more visible it becomes (inverted alpha)."""
+    _REVEAL_MAX = 14
+
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.speed = 1.2
+
+    def on_sonar_reveal(self):
+        self.reveal = self._REVEAL_MAX
+
+    def draw(self, surf, offset):
+        for i, (tx, ty) in (enumerate(self.trail)
+                            if cfg_settings.get('show_trail', True) else []):
+            t = (i + 1) / max(len(self.trail), 1)
+            b = int(t * 18)
+            if b > 2:
+                pygame.draw.circle(surf, (b, b, b * 2),
+                                   (int(tx - offset[0]), int(ty - offset[1])),
+                                   max(1, int(t * 1.8)))
+        if self.reveal <= 0:
+            return
+        alpha = (1.0 - self.reveal / self._REVEAL_MAX) * 0.92
+        if alpha < 0.04:
+            return
+        col = lerp_color(BLACK, (210, 210, 255), alpha)
+        cx2 = int(self.x - offset[0])
+        cy2 = int(self.y - offset[1])
+        r   = ENEMY_RADIUS
+        pygame.draw.circle(surf, col, (cx2, cy2), r)
+        pygame.draw.circle(surf, lerp_color(BLACK, (230, 230, 255), alpha * 0.6),
+                           (cx2, cy2), r, 1)
+        pygame.draw.circle(surf, lerp_color(BLACK, (255, 255, 255), alpha * 0.4),
+                           (cx2, cy2), max(1, r // 3))
+
+
+class SonicShockwave:
+    """Player ability (G key). Expanding ring that stuns nearby enemies."""
+    MAX_RADIUS = 150
+    SPEED      = 6
+
+    def __init__(self, x, y):
+        self.x      = x
+        self.y      = y
+        self.radius = 0
+        self.dead   = False
+        self._hit   = set()
+
+    def update(self, enemies):
+        if self.dead:
+            return
+        self.radius += self.SPEED
+        if self.radius >= self.MAX_RADIUS:
+            self.dead = True
+            return
+        for e in enemies:
+            if id(e) in self._hit or not hasattr(e, 'stunned'):
+                continue
+            d = dist((self.x, self.y), (e.x, e.y))
+            if abs(d - self.radius) < self.SPEED + 5:
+                self._hit.add(id(e))
+                nd = math.hypot(e.x - self.x, e.y - self.y) or 1
+                e.knockback((e.x - self.x) / nd, (e.y - self.y) / nd, 55)
+
+    def draw(self, surf, offset):
+        if self.dead:
+            return
+        f   = 1.0 - (self.radius / self.MAX_RADIUS)
+        col = (int(60 * f), int(200 * f), int(255 * f))
+        cx2 = int(self.x - offset[0])
+        cy2 = int(self.y - offset[1])
+        r   = int(self.radius)
+        if r > 0:
+            pygame.draw.circle(surf, col, (cx2, cy2), r, 3)
+            if r > 25:
+                pygame.draw.circle(surf, (int(30*f), int(100*f), int(180*f)),
+                                   (cx2, cy2), r - 18, 1)
+
+
+# ──────────────────── VISUAL EFFECTS ───────────────────────────────────
+
+def apply_chromatic_aberration(game_surf, intensity_px):
+    """Shift R channel right and B channel left (chromatic aberration)."""
+    if intensity_px < 1:
+        return game_surf
+    shift = int(intensity_px)
+    if _HAS_NUMPY:
+        try:
+            arr    = pygame.surfarray.array3d(game_surf)
+            w      = arr.shape[0]
+            result = np.zeros_like(arr)
+            if shift < w:
+                result[shift:, :, 0]    = arr[:w - shift, :, 0]  # R right
+                result[:, :, 1]          = arr[:, :, 1]            # G centre
+                result[:w - shift, :, 2] = arr[shift:, :, 2]      # B left
+            return pygame.surfarray.make_surface(result)
+        except Exception:
+            return game_surf
+    else:
+        try:
+            w2, h2 = game_surf.get_size()
+            res = pygame.Surface((w2, h2))
+            res.fill((0, 0, 0))
+            rm = pygame.Surface((w2, h2)); rm.fill((255, 0, 0))
+            gm = pygame.Surface((w2, h2)); gm.fill((0, 255, 0))
+            bm = pygame.Surface((w2, h2)); bm.fill((0, 0, 255))
+            rs = game_surf.copy(); rs.blit(rm, (0,0), special_flags=pygame.BLEND_MULT)
+            gs = game_surf.copy(); gs.blit(gm, (0,0), special_flags=pygame.BLEND_MULT)
+            bs = game_surf.copy(); bs.blit(bm, (0,0), special_flags=pygame.BLEND_MULT)
+            res.blit(rs, (shift, 0),  special_flags=pygame.BLEND_ADD)
+            res.blit(gs, (0, 0),       special_flags=pygame.BLEND_ADD)
+            res.blit(bs, (-shift, 0),  special_flags=pygame.BLEND_ADD)
+            return res
+        except Exception:
+            return game_surf
+
+
+def apply_glitch_lines(surf, glitch_lines):
+    """Displace horizontal strips of surf in-place for glitch effect."""
+    w2 = surf.get_width()
+    h2 = surf.get_height()
+    for gl in glitch_lines:
+        y_pos, x_off, gl_h, _ = gl
+        y_pos   = max(0, min(y_pos, h2 - 1))
+        strip_h = max(1, min(gl_h, h2 - y_pos))
+        try:
+            strip = surf.subsurface(pygame.Rect(0, y_pos, w2, strip_h)).copy()
+            surf.blit(strip, (x_off, y_pos))
+        except Exception:
+            pass
 
 
 class Player:
@@ -1259,6 +1588,29 @@ def build_map(cfg=None):
     for col_i, row_i in floor_cells[idx:idx + cfg.get('n_orbs', 2)]:
         echo_orbs.append(EchoOrb(col_i * TILE + TILE // 2,
                                   row_i * TILE + TILE // 2))
+    idx += cfg.get('n_orbs', 2)
+
+    # NEW: VoidShadow absorbers
+    void_shadows = []
+    for _ in range(cfg.get('n_void', 0)):
+        if idx < len(floor_cells):
+            col_i, row_i = floor_cells[idx]; idx += 1
+            void_shadows.append(VoidShadow(col_i * TILE + TILE // 2,
+                                            row_i * TILE + TILE // 2))
+
+    # NEW: ScreamerEnemy
+    for _ in range(cfg.get('n_screamer', 0)):
+        if idx < len(floor_cells):
+            col_i, row_i = floor_cells[idx]; idx += 1
+            enemies.append(ScreamerEnemy(col_i * TILE + TILE // 2,
+                                         row_i * TILE + TILE // 2))
+
+    # NEW: PhantomEnemy
+    for _ in range(cfg.get('n_phantom', 0)):
+        if idx < len(floor_cells):
+            col_i, row_i = floor_cells[idx]; idx += 1
+            enemies.append(PhantomEnemy(col_i * TILE + TILE // 2,
+                                        row_i * TILE + TILE // 2))
 
     # Build wall grid for A* pathfinding
     wall_grid = [[False] * COLS for _ in range(ROWS)]
@@ -1269,8 +1621,170 @@ def build_map(cfg=None):
             wall_grid[gr][gc] = True
 
     return walls, enemies, player_pos, exit_rect, traps, wall_grid, \
-           floor_hazards, noise_zones, echo_orbs
+           floor_hazards, noise_zones, echo_orbs, void_shadows
 
+
+
+def draw_export_dialog(surf, font, small_font, code, tick, copied=False, copied_tick=0):
+    sw, sh = surf.get_size()
+    cx, cy = sw // 2, sh // 2
+    # dark background
+    ov = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    ov.fill((0, 0, 0, 200))
+    surf.blit(ov, (0, 0))
+
+    # glass panel
+    pw, ph2 = min(500, sw - 40), 260
+    px, py = cx - pw // 2, cy - ph2 // 2
+    ps = pygame.Surface((pw, ph2), pygame.SRCALPHA)
+    ps.fill((0, 15, 25, 235))
+    surf.blit(ps, (px, py))
+    
+    # Glowing border
+    bv = int(120 + 80 * (math.sin(tick * 0.08) * 0.5 + 0.5))
+    pygame.draw.rect(surf, (0, bv, min(255, bv + 40)), (px, py, pw, ph2), 2)
+
+    # title
+    try: tf = pygame.font.SysFont("consolas", 24, bold=True)
+    except: tf = font
+    t_s = tf.render("CODIGO DE NIVEL EXPORTADO", True, (255, 210, 0)) # GOLD
+    surf.blit(t_s, (cx - t_s.get_width()//2, py + 22))
+
+    # instructions
+    try: sf = pygame.font.SysFont("consolas", 13)
+    except: sf = small_font
+    inst = sf.render("Comparte este codigo de 6 digitos para jugar tu nivel:", True, (130, 180, 200))
+    surf.blit(inst, (cx - inst.get_width()//2, py + 58))
+
+    # code box
+    box_w, box_h = 240, 52
+    box_x = cx - box_w // 2
+    box_y = py + 88
+    pygame.draw.rect(surf, (0, 30, 45), (box_x, box_y, box_w, box_h))
+    pygame.draw.rect(surf, (0, 180, 255), (box_x, box_y, box_w, box_h), 2)
+
+    # large, readable font for the code
+    try: cf = pygame.font.SysFont("consolas", 32, bold=True)
+    except: cf = font
+    # add spacing between digits for readability
+    spaced_code = " ".join(list(code))
+    cs = cf.render(spaced_code, True, (0, 255, 200))
+    surf.blit(cs, (cx - cs.get_width()//2, box_y + box_h // 2 - cs.get_height()//2))
+
+    # Buttons side-by-side
+    mpos = pygame.mouse.get_pos()
+    
+    copy_r = pygame.Rect(cx - 150, py + ph2 - 50, 140, 34)
+    close_r = pygame.Rect(cx + 10, py + ph2 - 50, 140, 34)
+
+    # Draw copy button
+    copy_hov = copy_r.collidepoint(mpos)
+    copy_lbl_text = "¡COPIADO!" if copied else "COPIAR"
+    copy_col = (0, 180, 80) if copied else ((0, 160, 100) if copy_hov else (0, 100, 60))
+    pygame.draw.rect(surf, copy_col, copy_r)
+    pygame.draw.rect(surf, (255, 255, 255) if copy_hov else (60, 255, 120), copy_r, 1)
+    
+    try: bf = pygame.font.SysFont("consolas", 14, bold=True)
+    except: bf = font
+    copy_lbl = bf.render(copy_lbl_text, True, (255, 255, 255))
+    surf.blit(copy_lbl, (copy_r.centerx - copy_lbl.get_width()//2, copy_r.centery - copy_lbl.get_height()//2))
+
+    # Draw close button
+    close_hov = close_r.collidepoint(mpos)
+    close_col = (180, 40, 40) if close_hov else (120, 24, 24)
+    pygame.draw.rect(surf, close_col, close_r)
+    pygame.draw.rect(surf, (255, 255, 255) if close_hov else (255, 80, 80), close_r, 1)
+    close_lbl = bf.render("CERRAR", True, (255, 255, 255))
+    surf.blit(close_lbl, (close_r.centerx - close_lbl.get_width()//2, close_r.centery - close_lbl.get_height()//2))
+
+    # Draw Toast pop-up message if recently copied
+    if copied_tick > 0:
+        # Calculate alpha for fade-out in the last 30 frames
+        alpha = min(220, int(220 * (copied_tick / 30.0)))
+        
+        # Floating upward animation
+        y_offset = - (90 - copied_tick) * 0.4
+        toast_w, toast_h = 260, 28
+        toast_x = cx - toast_w // 2
+        toast_y = py + 54 + y_offset # float above instructions/code box
+        
+        # Draw glassmorphic emerald toast
+        toast_surf = pygame.Surface((toast_w, toast_h), pygame.SRCALPHA)
+        toast_surf.fill((0, 40, 20, alpha))
+        pygame.draw.rect(toast_surf, (60, 255, 120, alpha), (0, 0, toast_w, toast_h), 1)
+        
+        try: tf2 = pygame.font.SysFont("consolas", 11, bold=True)
+        except: tf2 = small_font
+        msg = tf2.render("¡CODIGO COPIADO AL PORTAPAPELES!", True, (100, 255, 160))
+        toast_surf.blit(msg, (toast_w//2 - msg.get_width()//2, toast_h//2 - msg.get_height()//2))
+        toast_surf.set_alpha(alpha)
+        
+        surf.blit(toast_surf, (toast_x, toast_y))
+
+    return close_r, copy_r
+
+
+def draw_import_dialog(surf, font, small_font, buf, error, tick):
+    sw, sh = surf.get_size()
+    cx, cy = sw // 2, sh // 2
+    # dark background
+    ov = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    ov.fill((0, 0, 0, 200))
+    surf.blit(ov, (0, 0))
+
+    # glass panel
+    pw, ph2 = min(560, sw - 40), 240
+    px, py = cx - pw // 2, cy - ph2 // 2
+    ps = pygame.Surface((pw, ph2), pygame.SRCALPHA)
+    ps.fill((0, 20, 30, 230))
+    surf.blit(ps, (px, py))
+    pygame.draw.rect(surf, CYAN, (px, py, pw, ph2), 2)
+
+    # title
+    try: tf = pygame.font.SysFont("consolas", 22, bold=True)
+    except: tf = font
+    t_s = tf.render("IMPORTAR NIVEL", True, GOLD)
+    surf.blit(t_s, (cx - t_s.get_width()//2, py + 20))
+
+    # instructions
+    try: sf = pygame.font.SysFont("consolas", 12)
+    except: sf = small_font
+    inst = sf.render("Pega el codigo de 6 digitos usando Ctrl+V o escribelo, luego presiona Enter:", True, (130, 180, 200))
+    surf.blit(inst, (cx - inst.get_width()//2, py + 55))
+
+    # input box
+    box_w, box_h = pw - 60, 42
+    box_r = pygame.Rect(cx - box_w//2, py + 85, box_w, box_h)
+    pygame.draw.rect(surf, (0, 40, 60), box_r)
+    pygame.draw.rect(surf, (0, 150, 200), box_r, 1)
+
+    # show typed/pasted text
+    disp = buf
+    if len(disp) > 45:
+        disp = "..." + disp[-42:]
+    try: cf = pygame.font.SysFont("consolas", 14)
+    except: cf = small_font
+    text_s = cf.render(disp + ("|" if (tick // 20) % 2 == 0 else ""), True, WHITE)
+    surf.blit(text_s, (box_r.x + 10, box_r.centery - text_s.get_height()//2))
+
+    if error:
+        err_s = sf.render("Codigo invalido o corrupto!", True, RED)
+        surf.blit(err_s, (cx - err_s.get_width()//2, py + 135))
+
+    # buttons: OK | CANCEL
+    ok_r     = pygame.Rect(cx - 120, py + ph2 - 45, 110, 32)
+    cancel_r = pygame.Rect(cx + 10,  py + ph2 - 45, 110, 32)
+    mpos     = pygame.mouse.get_pos()
+
+    for btn, lbl, col in [(ok_r, "IMPORTAR", (0, 140, 70)), (cancel_r, "CANCELAR", (120, 30, 30))]:
+        hov = btn.collidepoint(mpos)
+        c = tuple(min(255, int(ch*1.3)) if hov else ch for ch in col)
+        pygame.draw.rect(surf, c, btn)
+        pygame.draw.rect(surf, WHITE if hov else CYAN, btn, 1)
+        lbl_s = sf.render(lbl, True, WHITE)
+        surf.blit(lbl_s, (btn.centerx - lbl_s.get_width()//2, btn.centery - lbl_s.get_height()//2))
+
+    return ok_r, cancel_r
 
 
 #  Pantalla de resolución 
@@ -2012,7 +2526,7 @@ def draw_hud(surf, font, small_font, decoys, alert_count, caught, won, level_idx
         surf.blit(alert_txt, (W//2 - alert_txt.get_width()//2, 8))
 
     controls = small_font.render(
-        "WASD:mover  Shift:sigilo  Clic:sonar  F:cono  Q:roca  E:absorb  Clic-Der:señuelo  R:reset",
+        "WASD:mover  Shift:sigilo  Clic:sonar  F:cono  Q:roca  E:absorb  G:onda  Z:eco-pas  Clic-Der:señuelo  R:reset",
         True, (80, 120, 140))
     surf.blit(controls, (12, H - 22))
 
@@ -2200,6 +2714,19 @@ async def main():
     heartbeat_t    = 0         # frames until next heartbeat visual
     mimics         = []        # MimicEnemy list (subset of enemies list for sonar checks)
     stalkers       = []        # StalkerEnemy list (for sonar-heard notification)
+    void_shadows   = []        # VoidShadow list
+    shockwaves     = []        # SonicShockwave list
+    passive_eco_active = False
+    passive_eco_energy = PASSIVE_ECO_MAX_ENERGY
+    passive_eco_timer  = 0
+    shockwave_cooldown = 0
+    editor_export_open = False
+    editor_export_code = ""
+    editor_export_copied = False
+    editor_export_copied_tick = 0
+    editor_import_open = False
+    editor_import_buf  = ""
+    editor_import_error = False
 
     def new_game(level):
         global REVEAL_DURATION, SONAR_MAX_RADIUS, MICRO_PULSE_INTERVAL
@@ -2210,13 +2737,13 @@ async def main():
         MICRO_PULSE_INTERVAL = cfg['micro_interval']
         ENEMY_SPEED_BASE     = round(cfg['spd_mult'] * 0.9, 2)
         ENEMY_ALERT_SPEED    = round(cfg['spd_mult'] * 2.2, 2)
-        w2, e2, ppos, ex, tr, wg, fh, nz, eo = build_map(cfg)
+        w2, e2, ppos, ex, tr, wg, fh, nz, eo, vs = build_map(cfg)
         m   = cfg.get('mechanic')
         lt  = cfg.get('timer_secs', 0) * FPS if m == 'timer' else 0
         trc = cfg.get('respawn_frames', 900) if m == 'respawn_traps' else 0
         bc  = cfg.get('blackout_interval', 900) if m == 'blackout' else 0
         return (w2, e2, Player(*ppos), [], DECOY_COUNT, 0, ex, tr, 0, wg,
-                lt, trc, bc, m, cfg, fh, nz, eo, SoundAbsorber())
+                lt, trc, bc, m, cfg, fh, nz, eo, SoundAbsorber(), vs)
 
     def calc_score(elapsed_ticks, pulses_used, level):
         """Calcula la puntuación al completar un nivel."""
@@ -2377,14 +2904,20 @@ async def main():
                 nonlocal score, pulse_count, game_ticks, sfx_played, player2, paused
                 nonlocal pause_origin, state
                 nonlocal floor_hazards, noise_zones, echo_orbs, rocks, absorber
-                nonlocal rock_mode, heartbeat_t, mimics, stalkers
+                nonlocal rock_mode, heartbeat_t, mimics, stalkers, void_shadows
+                nonlocal shockwaves, passive_eco_active, passive_eco_energy, passive_eco_timer, shockwave_cooldown
                 (walls, enemies, player, pulses, decoys, tick, exit_rect,
                  traps, micro_pulse_timer, wall_grid,
                  lv_timer, trap_respawn_cd, blackout_cd, mech, active_cfg,
-                 floor_hazards, noise_zones, echo_orbs, absorber) = new_game(current_level)
+                 floor_hazards, noise_zones, echo_orbs, absorber, void_shadows) = new_game(current_level)
                 mimics   = [e for e in enemies if isinstance(e, MimicEnemy)]
                 stalkers = [e for e in enemies if isinstance(e, StalkerEnemy)]
                 rocks = []; rock_mode = False; heartbeat_t = 0
+                shockwaves = []
+                passive_eco_active = False
+                passive_eco_energy = PASSIVE_ECO_MAX_ENERGY
+                passive_eco_timer = 0
+                shockwave_cooldown = 0
                 score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                 player2 = Player2(player.x + TILE, player.y) if coop_enabled else None
                 paused = False; pause_origin = 'ls'; state = 'play'
@@ -2397,22 +2930,30 @@ async def main():
                 nonlocal score, pulse_count, game_ticks, sfx_played, player2, paused
                 nonlocal pause_origin, state
                 nonlocal floor_hazards, noise_zones, echo_orbs, rocks, absorber
-                nonlocal rock_mode, heartbeat_t, mimics, stalkers
+                nonlocal rock_mode, heartbeat_t, mimics, stalkers, void_shadows
+                nonlocal shockwaves, passive_eco_active, passive_eco_energy, passive_eco_timer, shockwave_cooldown
                 data = custom_level_load(custom_names[idx])
                 if not data:
                     return
                 grid = data
-                w2, e2, ppos2, ex2, tr2, wg2 = build_map_from_editor(
+                w2, e2, ppos2, ex2, tr2, wg2, vs2 = build_map_from_editor(
                     grid, COLS, ROWS, TILE,
-                    Wall, BatEnemy, Enemy, SoundTrap, ExitTile, MAT_NORMAL)
-                walls, enemies, exit_rect, traps, wall_grid = w2, e2, ex2, tr2, wg2
+                    Wall, BatEnemy, Enemy, SoundTrap, ExitTile, MAT_NORMAL,
+                    VoidShadow, ScreamerEnemy, PhantomEnemy)
+                walls, enemies, exit_rect, traps, wall_grid, void_shadows = w2, e2, ex2, tr2, wg2, vs2
                 player = Player(*ppos2)
                 pulses = []; decoys = DECOY_COUNT; tick = 0
                 micro_pulse_timer = lv_timer = trap_respawn_cd = blackout_cd = 0
                 mech = None; active_cfg = {}
                 floor_hazards = []; noise_zones = []; echo_orbs = []
                 rocks = []; absorber = SoundAbsorber(); rock_mode = False; heartbeat_t = 0
-                mimics = []; stalkers = []
+                mimics   = [e for e in enemies if isinstance(e, MimicEnemy)]
+                stalkers = [e for e in enemies if isinstance(e, StalkerEnemy)]
+                shockwaves = []
+                passive_eco_active = False
+                passive_eco_energy = PASSIVE_ECO_MAX_ENERGY
+                passive_eco_timer = 0
+                shockwave_cooldown = 0
                 score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                 player2 = Player2(player.x + TILE, player.y) if coop_enabled else None
                 paused = False; pause_origin = 'ls'; state = 'play'
@@ -2571,46 +3112,161 @@ async def main():
             else:
                 mouse_cell = None
 
+            dialog_open = editor_save_open or editor_export_open or editor_import_open
+
             for ev in events:
                 if ev.type == pygame.KEYDOWN:
                     if ev.key == pygame.K_ESCAPE:
-                        state = 'intro'
-                    # Number keys 1-8 select palette
-                    if pygame.K_1 <= ev.key <= pygame.K_8:
+                        if editor_save_open:
+                            editor_save_open = False
+                        elif editor_export_open:
+                            editor_export_open = False
+                        elif editor_import_open:
+                            editor_import_open = False
+                        else:
+                            state = 'intro'
+                    # Number keys select palette (when no dialog open)
+                    elif not dialog_open and pygame.K_1 <= ev.key <= pygame.K_9:
                         editor_sel = ev.key - pygame.K_1
-                if ev.type == pygame.MOUSEWHEEL:
+                    elif not dialog_open and ev.key == pygame.K_0:
+                        editor_sel = 9
+
+                if not dialog_open and ev.type == pygame.MOUSEWHEEL:
                     editor_sel = (editor_sel - ev.y) % len(EDITOR_PALETTE)
+
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                    # Check action buttons first
-                    pr, cr, br, sr = draw_editor(screen, font, small_font, editor_grid,
-                                                 editor_sel, editor_tick, mouse_cell,
-                                                 TILE, COLS, ROWS, WHITE, CYAN, DARK_CYAN)
-                    if pr.collidepoint(mpos):
-                        # Launch the custom map
-                        w2, e2, ppos2, ex2, tr2, wg2 = build_map_from_editor(
-                            editor_grid, COLS, ROWS, TILE,
-                            Wall, BatEnemy, Enemy, SoundTrap, ExitTile, MAT_NORMAL)
-                        walls, enemies, exit_rect, traps, wall_grid = w2, e2, ex2, tr2, wg2
-                        player = Player(*ppos2)
-                        pulses = []; decoys = DECOY_COUNT; tick = 0
-                        micro_pulse_timer = lv_timer = trap_respawn_cd = blackout_cd = 0
-                        mech = None; active_cfg = {}
-                        score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
-                        player2 = None
-                        paused = False; pause_origin = 'editor'
-                        state = 'play'
-                    elif sr.collidepoint(mpos):
-                        editor_save_open = True
-                        editor_save_buf  = ""
-                        editor_save_tick = 0
-                    elif cr.collidepoint(mpos):
-                        editor_grid = empty_editor_grid(COLS, ROWS)
-                    elif br.collidepoint(mpos):
-                        state = 'intro'
-                    elif mouse_cell:
-                        sym = EDITOR_PALETTE[editor_sel][0]
-                        r2, c2 = mouse_cell
-                        editor_grid[r2][c2] = '.' if sym == 'X' else sym
+                    if editor_export_open:
+                        close_r, copy_r = draw_export_dialog(screen, font, small_font, editor_export_code, editor_tick, editor_export_copied, editor_export_copied_tick)
+                        if close_r.collidepoint(ev.pos):
+                            editor_export_open = False
+                        elif copy_r.collidepoint(ev.pos):
+                            editor_export_copied = True
+                            editor_export_copied_tick = 90
+                            try:
+                                import tkinter as tk
+                                root = tk.Tk()
+                                root.withdraw()
+                                root.clipboard_clear()
+                                root.clipboard_append(editor_export_code)
+                                root.update()
+                                root.destroy()
+                            except Exception:
+                                pass
+                    elif editor_import_open:
+                        ok_r, cancel_r = draw_import_dialog(screen, font, small_font, editor_import_buf, editor_import_error, editor_tick)
+                        if ok_r.collidepoint(ev.pos):
+                            # Try to import
+                            try:
+                                decoded = code_to_level(editor_import_buf.strip())
+                                if decoded and len(decoded) == ROWS and len(decoded[0]) == COLS:
+                                    editor_grid = decoded
+                                    editor_import_open = False
+                                else:
+                                    editor_import_error = True
+                            except Exception:
+                                editor_import_error = True
+                        elif cancel_r.collidepoint(ev.pos):
+                            editor_import_open = False
+                    elif editor_save_open:
+                        pass
+                    else:
+                        # Check action buttons first
+                        pr, cr, br, sr, expr, impr = draw_editor(screen, font, small_font, editor_grid,
+                                                                 editor_sel, editor_tick, mouse_cell,
+                                                                 TILE, COLS, ROWS, WHITE, CYAN, DARK_CYAN)
+                        if pr.collidepoint(mpos):
+                            # Launch the custom map
+                            w2, e2, ppos2, ex2, tr2, wg2, vs2 = build_map_from_editor(
+                                editor_grid, COLS, ROWS, TILE,
+                                Wall, BatEnemy, Enemy, SoundTrap, ExitTile, MAT_NORMAL,
+                                VoidShadow, ScreamerEnemy, PhantomEnemy)
+                            walls, enemies, exit_rect, traps, wall_grid, void_shadows = w2, e2, ex2, tr2, wg2, vs2
+                            player = Player(*ppos2)
+                            pulses = []; decoys = DECOY_COUNT; tick = 0
+                            micro_pulse_timer = lv_timer = trap_respawn_cd = blackout_cd = 0
+                            mech = None; active_cfg = {}
+                            floor_hazards = []; noise_zones = []; echo_orbs = []
+                            rocks = []; absorber = SoundAbsorber(); rock_mode = False; heartbeat_t = 0
+                            mimics   = [e for e in enemies if isinstance(e, MimicEnemy)]
+                            stalkers = [e for e in enemies if isinstance(e, StalkerEnemy)]
+                            shockwaves = []
+                            passive_eco_active = False
+                            passive_eco_energy = PASSIVE_ECO_MAX_ENERGY
+                            passive_eco_timer = 0
+                            shockwave_cooldown = 0
+                            score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
+                            player2 = None
+                            paused = False; pause_origin = 'editor'
+                            state = 'play'
+                        elif sr.collidepoint(mpos):
+                            editor_save_open = True
+                            editor_save_buf  = ""
+                            editor_save_tick = 0
+                        elif expr.collidepoint(mpos):
+                            editor_export_open = True
+                            editor_export_code = level_to_code(editor_grid)
+                            editor_export_copied = True
+                            editor_export_copied_tick = 90
+                            # Copy to clipboard
+                            try:
+                                import tkinter as tk
+                                root = tk.Tk()
+                                root.withdraw()
+                                root.clipboard_clear()
+                                root.clipboard_append(editor_export_code)
+                                root.update()
+                                root.destroy()
+                            except Exception:
+                                pass
+                        elif impr.collidepoint(mpos):
+                            editor_import_open = True
+                            editor_import_buf  = ""
+                            editor_import_error = False
+                        elif cr.collidepoint(mpos):
+                            editor_grid = empty_editor_grid(COLS, ROWS)
+                        elif br.collidepoint(mpos):
+                            state = 'intro'
+                        elif mouse_cell:
+                            sym = EDITOR_PALETTE[editor_sel][0]
+                            r2, c2 = mouse_cell
+                            editor_grid[r2][c2] = '.' if sym == 'X' else sym
+
+            # Import dialog keyboard handling
+            if editor_import_open:
+                for ev in events:
+                    if ev.type == pygame.KEYDOWN:
+                        if ev.key == pygame.K_ESCAPE:
+                            editor_import_open = False
+                        elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            try:
+                                decoded = code_to_level(editor_import_buf.strip())
+                                if decoded and len(decoded) == ROWS and len(decoded[0]) == COLS:
+                                    editor_grid = decoded
+                                    editor_import_open = False
+                                else:
+                                    editor_import_error = True
+                            except Exception:
+                                editor_import_error = True
+                        elif ev.key == pygame.K_BACKSPACE:
+                            editor_import_buf = editor_import_buf[:-1]
+                            editor_import_error = False
+                        elif ev.key == pygame.K_v and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                            try:
+                                import tkinter as tk
+                                root = tk.Tk()
+                                root.withdraw()
+                                clipboard_text = root.clipboard_get()
+                                if clipboard_text:
+                                    digits = "".join(c for c in clipboard_text if c.isdigit())
+                                    editor_import_buf = (editor_import_buf + digits)[:6]
+                                root.destroy()
+                            except Exception:
+                                pass
+                        else:
+                            ch = ev.unicode
+                            if ch and ch.isdigit() and len(editor_import_buf) < 6:
+                                editor_import_buf += ch
+                                editor_import_error = False
 
             # Save dialog keyboard handling
             if editor_save_open:
@@ -2629,15 +3285,16 @@ async def main():
                             if ch and ch.isprintable() and len(editor_save_buf) < 20:
                                 editor_save_buf += ch
 
-            # Drag-paint on hold (skip when save dialog open)
-            if not editor_save_open and pygame.mouse.get_pressed()[0] and mouse_cell:
+            # Drag-paint on hold
+            if not dialog_open and pygame.mouse.get_pressed()[0] and mouse_cell:
                 sym = EDITOR_PALETTE[editor_sel][0]
                 r2, c2 = mouse_cell
                 editor_grid[r2][c2] = '.' if sym == 'X' else sym
 
-            pr, cr, br, sr = draw_editor(screen, font, small_font, editor_grid,
-                                         editor_sel, editor_tick, mouse_cell,
-                                         TILE, COLS, ROWS, WHITE, CYAN, DARK_CYAN)
+            pr, cr, br, sr, expr, impr = draw_editor(screen, font, small_font, editor_grid,
+                                                     editor_sel, editor_tick, mouse_cell,
+                                                     TILE, COLS, ROWS, WHITE, CYAN, DARK_CYAN)
+
             if editor_save_open:
                 editor_save_tick += 1
                 existing = custom_levels_list()
@@ -2651,6 +3308,13 @@ async def main():
                             editor_save_open = False
                         elif canc_r2.collidepoint(ev.pos):
                             editor_save_open = False
+            elif editor_export_open:
+                if editor_export_copied_tick > 0:
+                    editor_export_copied_tick -= 1
+                draw_export_dialog(screen, font, small_font, editor_export_code, editor_tick, editor_export_copied, editor_export_copied_tick)
+            elif editor_import_open:
+                draw_import_dialog(screen, font, small_font, editor_import_buf, editor_import_error, editor_tick)
+
             pygame.display.flip()
             await asyncio.sleep(0); continue
 
@@ -2670,20 +3334,27 @@ async def main():
                         (walls, enemies, player, pulses, decoys, tick, exit_rect,
                          traps, micro_pulse_timer, wall_grid,
                          lv_timer, trap_respawn_cd, blackout_cd, mech, active_cfg,
-                         floor_hazards, noise_zones, echo_orbs, absorber) = new_game(current_level)
+                         floor_hazards, noise_zones, echo_orbs, absorber, void_shadows) = new_game(current_level)
                         mimics   = [e for e in enemies if isinstance(e, MimicEnemy)]
                         stalkers = [e for e in enemies if isinstance(e, StalkerEnemy)]
                         rocks = []; rock_mode = False; heartbeat_t = 0
                     else:
-                        w2, e2, ppos2, ex2, tr2, wg2 = build_map_from_editor(
+                        w2, e2, ppos2, ex2, tr2, wg2, vs2 = build_map_from_editor(
                             editor_grid, COLS, ROWS, TILE,
-                            Wall, BatEnemy, Enemy, SoundTrap, ExitTile, MAT_NORMAL)
-                        walls, enemies, exit_rect, traps, wall_grid = w2, e2, ex2, tr2, wg2
+                            Wall, BatEnemy, Enemy, SoundTrap, ExitTile, MAT_NORMAL,
+                            VoidShadow, ScreamerEnemy, PhantomEnemy)
+                        walls, enemies, exit_rect, traps, wall_grid, void_shadows = w2, e2, ex2, tr2, wg2, vs2
                         player = Player(*ppos2)
                         floor_hazards = []; noise_zones = []; echo_orbs = []
-                        rocks = []; absorber = SoundAbsorber(); rock_mode = False
-                        mimics = []; stalkers = []
+                        rocks = []; absorber = SoundAbsorber(); rock_mode = False; heartbeat_t = 0
+                        mimics   = [e for e in enemies if isinstance(e, MimicEnemy)]
+                        stalkers = [e for e in enemies if isinstance(e, StalkerEnemy)]
                     pulses = []; decoys = DECOY_COUNT; tick = 0
+                    shockwaves = []
+                    passive_eco_active = False
+                    passive_eco_energy = PASSIVE_ECO_MAX_ENERGY
+                    passive_eco_timer = 0
+                    shockwave_cooldown = 0
                     score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                     paused = False
                 # New: Q toggles rock-throw mode
@@ -2707,6 +3378,12 @@ async def main():
                         pulses.append(p_cone)
                     pulse_count += 1
                     play_sfx("sonar")
+                # New: G fires sonic shockwave
+                if ev.key == pygame.K_g and not paused and not player.caught and not player.won:
+                    if shockwave_cooldown == 0:
+                        shockwaves.append(SonicShockwave(player.x, player.y))
+                        shockwave_cooldown = SHOCKWAVE_COOLDOWN
+                        play_sfx("sonar")
             # Mouse: clic en botones de derrota
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and player.caught:
                 cx_d, cy_d = W // 2, H // 2
@@ -2721,11 +3398,16 @@ async def main():
                     (walls, enemies, player, pulses, decoys, tick, exit_rect,
                      traps, micro_pulse_timer, wall_grid,
                      lv_timer, trap_respawn_cd, blackout_cd, mech, active_cfg,
-                     floor_hazards, noise_zones, echo_orbs, absorber) = new_game(current_level)
+                     floor_hazards, noise_zones, echo_orbs, absorber, void_shadows) = new_game(current_level)
                     mimics   = [e for e in enemies if isinstance(e, MimicEnemy)]
                     stalkers = [e for e in enemies if isinstance(e, StalkerEnemy)]
                     rocks = []; rock_mode = False; heartbeat_t = 0
-                    score = 0; pulse_count = 0; game_ticks = 0
+                    shockwaves = []
+                    passive_eco_active = False
+                    passive_eco_energy = PASSIVE_ECO_MAX_ENERGY
+                    passive_eco_timer = 0
+                    shockwave_cooldown = 0
+                    score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                 elif m_rect_d.collidepoint(ev.pos):  # Menú
                     state = 'ls'; ls_tick = 0
             # Mouse: sonar / decoy / rock
@@ -2762,6 +3444,20 @@ async def main():
             keys     = pygame.key.get_pressed()
             sneaking = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
             in_noise = any(nz.contains(player.x, player.y) for nz in noise_zones)
+            
+            # Check Z key for passive ecolocalization
+            passive_eco_active = keys[pygame.K_z]
+            if passive_eco_active and passive_eco_energy > 0:
+                passive_eco_energy -= 1
+                passive_eco_timer += 1
+                if passive_eco_timer >= PASSIVE_ECO_INTERVAL:
+                    passive_eco_timer = 0
+                    pulses.append(SonarPulse(player.x, player.y, color=(0, 180, 255), is_silent=True, max_radius=85))
+            else:
+                passive_eco_timer = 0
+                if passive_eco_energy < PASSIVE_ECO_MAX_ENERGY:
+                    passive_eco_energy = min(PASSIVE_ECO_MAX_ENERGY, passive_eco_energy + 0.5)
+
             # P1 uses WASD only — arrow keys reserved for Player 2 (co-op)
             dx = int(keys[pygame.K_d]) - int(keys[pygame.K_a])
             dy = int(keys[pygame.K_s]) - int(keys[pygame.K_w])
@@ -2851,9 +3547,21 @@ async def main():
             music_set_state("lose")
 
         if not paused:
+            if shockwave_cooldown > 0:
+                shockwave_cooldown -= 1
+
             # Pulses
             new_from = []
             for p in pulses:
+                # Check absorption by void shadows
+                absorbed = False
+                for vs in void_shadows:
+                    if vs.check_pulse_absorption(p):
+                        p.dead = True
+                        absorbed = True
+                        break
+                if absorbed:
+                    continue
                 ex2 = p.update(walls, enemies, exit_rect, player)
                 if ex2: new_from.extend(ex2)
             pulses = [p for p in pulses if not p.dead]
@@ -2916,14 +3624,36 @@ async def main():
                 for mc2 in mimics:
                     mc2.update(player)
 
-                # NEW: heartbeat based on alert level
-                if not player.caught and not player.won:
-                    n_alert = sum(1 for e in enemies
-                                  if hasattr(e, 'alert_t') and e.alert_t > 0)
-                    if n_alert > 0:
-                        ratio = min(1.0, n_alert / max(len(enemies), 1))
-                        hb_interval = int(HEARTBEAT_MIN - ratio * (HEARTBEAT_MIN - HEARTBEAT_MAX))
-                        heartbeat_t -= 1
+                # NEW: void shadows update
+                for vs in void_shadows:
+                    vs.update()
+
+                # NEW: shockwaves update
+                new_shockwaves = []
+                for sw in shockwaves:
+                    sw.update(enemies)
+                    if not sw.dead:
+                        new_shockwaves.append(sw)
+                shockwaves = new_shockwaves
+
+                # NEW: heartbeat sound and frequency updates
+                n_alert = sum(1 for e in enemies if hasattr(e, 'alert_t') and e.alert_t > 0)
+                if n_alert > 0:
+                    ratio = min(1.0, n_alert / max(len(enemies), 1))
+                    heartbeat_set_bpm(int(65 + ratio * 85))
+                else:
+                    if enemies:
+                        min_d = min(dist((player.x, player.y), (e.x, e.y)) for e in enemies)
+                        if min_d < 180:
+                            p_ratio = 1.0 - (min_d / 180)
+                            heartbeat_set_bpm(int(45 + p_ratio * 20))
+                        else:
+                            heartbeat_set_bpm(0)
+                    else:
+                        heartbeat_set_bpm(0)
+                heartbeat_tick()
+            else:
+                heartbeat_set_bpm(0)
 
 
         # Camera
@@ -2959,6 +3689,8 @@ async def main():
         for fh in floor_hazards: fh.draw(game_surf, offset)
         for nz in noise_zones:   nz.draw(game_surf, offset)
         for orb in echo_orbs:    orb.draw(game_surf, offset)
+        for vs in void_shadows:  vs.draw(game_surf, offset)
+        for sw in shockwaves:    sw.draw(game_surf, offset)
         for rock in rocks:       rock.draw(game_surf, offset)
         for mc2 in mimics:       mc2.draw(game_surf, offset)
         for p in pulses:         p.draw(game_surf, offset)
@@ -2967,6 +3699,44 @@ async def main():
         if player2:
             player2.draw(game_surf, offset)
 
+        # Apply Chromatic Aberration & Glitch effects to game_surf before blitting to screen
+        threat_level = 0.0
+        if not player.caught and not player.won:
+            for e in enemies:
+                if hasattr(e, 'state') and e.state == STATE_CHASE:
+                    d = dist((player.x, player.y), (e.x, e.y))
+                    if d < 200:
+                        threat_level = max(threat_level, 1.0 - (d / 200))
+                elif hasattr(e, 'alert_t') and e.alert_t > 0:
+                    d = dist((player.x, player.y), (e.x, e.y))
+                    if d < 150:
+                        threat_level = max(threat_level, (1.0 - (d / 150)) * 0.5)
+
+        aberration_px = int(threat_level * 8)
+        for sw in shockwaves:
+            if sw.radius < 50:
+                aberration_px = max(aberration_px, 6)
+
+        glitch_strips = []
+        if threat_level > 0.1:
+            n_strips = int(threat_level * 5)
+            for _ in range(n_strips):
+                y_pos = random.randint(0, VIEW_H - 1)
+                x_off = random.randint(int(-threat_level * 15), int(threat_level * 15))
+                gl_h  = random.randint(2, 10)
+                glitch_strips.append((y_pos, x_off, gl_h, 0))
+        elif player.caught:
+            aberration_px = 12
+            for _ in range(12):
+                y_pos = random.randint(0, VIEW_H - 1)
+                x_off = random.randint(-30, 30)
+                gl_h  = random.randint(4, 20)
+                glitch_strips.append((y_pos, x_off, gl_h, 0))
+
+        if aberration_px > 0:
+            game_surf = apply_chromatic_aberration(game_surf, aberration_px)
+        if glitch_strips:
+            apply_glitch_lines(game_surf, glitch_strips)
 
         screen.blit(game_surf, (0, HUD_TOP))
 
@@ -2985,6 +3755,35 @@ async def main():
                  score, pulse_count)
         # Extra HUD elements for new features
         absorber.draw_hud(screen, W - 200, H - 22, small_font)
+
+        if state == 'play' and player and not player.caught and not player.won:
+            # Energy bar for Ecolocalization (Z)
+            bar_w = 120
+            bar_h = 10
+            bar_x = 12
+            bar_y = H - 42
+            pygame.draw.rect(screen, (30, 50, 60), (bar_x, bar_y, bar_w, bar_h), 1)
+            energy_ratio = passive_eco_energy / PASSIVE_ECO_MAX_ENERGY
+            fill_w = int(bar_w * energy_ratio)
+            col_bar = (0, 180, 255) if energy_ratio > 0.2 else (255, 100, 0)
+            if fill_w > 0:
+                pygame.draw.rect(screen, col_bar, (bar_x + 1, bar_y + 1, fill_w - 2, bar_h - 2))
+            lbl_eco = small_font.render(f"ECO PASIVA (Z): {int(energy_ratio*100)}%", True, CYAN)
+            screen.blit(lbl_eco, (bar_x + bar_w + 8, bar_y - 2))
+
+            # Shockwave cooldown indicator (G)
+            cd_x = bar_x + bar_w + 160
+            cd_y = bar_y
+            if shockwave_cooldown > 0:
+                cd_ratio = shockwave_cooldown / SHOCKWAVE_COOLDOWN
+                pygame.draw.rect(screen, (80, 20, 20), (cd_x, cd_y, bar_w, bar_h))
+                pygame.draw.rect(screen, (255, 60, 60), (cd_x, cd_y, int(bar_w * cd_ratio), bar_h))
+                lbl_sw = small_font.render(f"ONDA SONICA (G): {shockwave_cooldown//60}s", True, RED)
+            else:
+                pygame.draw.rect(screen, (0, 100, 50), (cd_x, cd_y, bar_w, bar_h))
+                lbl_sw = small_font.render("ONDA SONICA (G): LISTO", True, GREEN)
+            pygame.draw.rect(screen, (30, 50, 60), (cd_x, cd_y, bar_w, bar_h), 1)
+            screen.blit(lbl_sw, (cd_x + bar_w + 8, cd_y - 2))
         if rock_mode:
             try: rm_f = pygame.font.SysFont("consolas", 13, bold=True)
             except: rm_f = small_font

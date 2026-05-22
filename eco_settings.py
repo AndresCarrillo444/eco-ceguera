@@ -1,4 +1,4 @@
-import json, os, math
+import json, os, math, base64, zlib
 import pygame
 
 # Paths 
@@ -290,3 +290,93 @@ def draw_save_level_dialog(surf, font, small_font, tick, name_buf,
         surf.blit(bl2, (r.centerx - bl2.get_width()//2, r.centery - bl2.get_height()//2))
 
     return ok_r, canc_r
+
+
+# ── LEVEL SHARING CODES ─────────────────────────────────────────────────────
+
+def level_to_code(grid):
+    """Generate a 6-digit level sharing code, save it locally and upload to Firebase if configured."""
+    import random
+    import urllib.request
+    import urllib.error
+    
+    code = f"{random.randint(100000, 999999)}"
+    
+    # Save a local copy
+    try:
+        _ensure_dir()
+        path = os.path.join(CUSTOM_LEVELS_DIR, f"{code}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"name": f"Compartido {code}", "grid": grid}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+    # Try to upload to Firebase database
+    try:
+        from eco_online_lb import FIREBASE_URL
+        if FIREBASE_URL and FIREBASE_URL.startswith("https://"):
+            url = FIREBASE_URL.rstrip("/") + f"/custom_levels/{code}.json"
+            payload = json.dumps(grid).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, method="PUT")
+            req.add_header("Content-Type", "application/json")
+            # Set a low timeout so it doesn't freeze the Pygame thread
+            urllib.request.urlopen(req, timeout=3)
+    except Exception:
+        pass
+
+    return code
+
+
+def code_to_level(code):
+    """Retrieve an editor grid from a 6-digit sharing code (local file or Firebase)."""
+    import urllib.request
+    import urllib.error
+
+    code = code.strip()
+    if not (code.isdigit() and len(code) == 6):
+        return None
+
+    # 1. Try local cache
+    try:
+        path = os.path.join(CUSTOM_LEVELS_DIR, f"{code}.json")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            grid = data.get("grid") if isinstance(data, dict) else data
+            if _validate_grid(grid):
+                return grid
+    except Exception:
+        pass
+
+    # 2. Try Firebase
+    try:
+        from eco_online_lb import FIREBASE_URL
+        if FIREBASE_URL and FIREBASE_URL.startswith("https://"):
+            url = FIREBASE_URL.rstrip("/") + f"/custom_levels/{code}.json"
+            req = urllib.request.urlopen(url, timeout=3)
+            grid = json.loads(req.read().decode("utf-8"))
+            if _validate_grid(grid):
+                # Save locally for future offline play
+                try:
+                    _ensure_dir()
+                    path = os.path.join(CUSTOM_LEVELS_DIR, f"{code}.json")
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump({"name": f"Importado {code}", "grid": grid}, f, ensure_ascii=False)
+                except Exception:
+                    pass
+                return grid
+    except Exception:
+        pass
+
+    return None
+
+
+def _validate_grid(grid):
+    """Verify that a grid structure is valid for the game."""
+    if not (isinstance(grid, list) and grid):
+        return False
+    if not (isinstance(grid[0], list) and grid[0]):
+        return False
+    if not isinstance(grid[0][0], str):
+        return False
+    return True

@@ -512,9 +512,13 @@ EDITOR_PALETTE = [
     ("S", "Inicio",  (60, 255, 120)),
     ("E", "Salida",  (255,210,   0)),
     ("N", "Enemigo", (255, 60,  60)),
-    ("B", "Murciél", (200, 30,  30)),
+    ("B", "Murciel", (200, 30,  30)),
     ("T", "Trampa",  (180,140,   0)),
     ("X", "Borrar",  (10,  10,  10)),
+    # ─ Nuevas entidades ─
+    ("V", "Vacio",   (50,   0,  80)),   # VoidShadow
+    ("C", "Chillan", (255, 215,  0)),   # ScreamerEnemy
+    ("P", "Fantasma",(180, 180, 255)),  # PhantomEnemy
 ]
 
 
@@ -529,9 +533,11 @@ def empty_editor_grid(COLS, ROWS):
 
 
 def build_map_from_editor(grid, COLS, ROWS, TILE, Wall, BatEnemy, Enemy, SoundTrap, ExitTile,
-                           MAT_NORMAL):
-    """Convert editor grid → game objects. Returns same tuple as build_map."""
+                           MAT_NORMAL, VoidShadow=None, ScreamerEnemy=None, PhantomEnemy=None):
+    """Convert editor grid → game objects.
+    Returns (walls, enemies, player_pos, exit_rect, traps, wall_grid, void_shadows)."""
     walls, enemies, traps = [], [], []
+    void_shadows = []
     player_pos  = (TILE + TILE // 2, TILE + TILE // 2)
     exit_rect   = None
     floor_cells = []
@@ -559,6 +565,15 @@ def build_map_from_editor(grid, COLS, ROWS, TILE, Wall, BatEnemy, Enemy, SoundTr
             elif ch == "T":
                 traps.append(SoundTrap(rx + TILE // 2, ry + TILE // 2))
                 floor_cells.append((col_i, row_i))
+            elif ch == 'V' and VoidShadow is not None:
+                void_shadows.append(VoidShadow(rx + TILE // 2, ry + TILE // 2))
+                floor_cells.append((col_i, row_i))
+            elif ch == 'C' and ScreamerEnemy is not None:
+                enemies.append(ScreamerEnemy(rx + TILE // 2, ry + TILE // 2))
+                floor_cells.append((col_i, row_i))
+            elif ch == 'P' and PhantomEnemy is not None:
+                enemies.append(PhantomEnemy(rx + TILE // 2, ry + TILE // 2))
+                floor_cells.append((col_i, row_i))
 
     # Build A* wall grid
     wall_grid = [[False] * COLS for _ in range(ROWS)]
@@ -573,7 +588,7 @@ def build_map_from_editor(grid, COLS, ROWS, TILE, Wall, BatEnemy, Enemy, SoundTr
         ci, ri = floor_cells[-1]
         exit_rect = ExitTile(pygame.Rect(ci * TILE + 4, ri * TILE + 4, TILE - 8, TILE - 8))
 
-    return walls, enemies, player_pos, exit_rect, traps, wall_grid
+    return walls, enemies, player_pos, exit_rect, traps, wall_grid, void_shadows
 
 
 def draw_editor(surf, font, small_font, grid, sel_tile, tick, mouse_cell,
@@ -640,15 +655,19 @@ def draw_editor(surf, font, small_font, grid, sel_tile, tick, mouse_cell,
     bw, bh2, bgap = 90, 28, 6
     btn_y  = sh - 36
     mpos   = pygame.mouse.get_pos()
-    play_rect  = pygame.Rect(sw - (bw + bgap) * 4, btn_y, bw, bh2)
-    save_rect  = pygame.Rect(sw - (bw + bgap) * 3, btn_y, bw, bh2)
-    clear_rect = pygame.Rect(sw - (bw + bgap) * 2, btn_y, bw, bh2)
-    back_rect  = pygame.Rect(sw - (bw + bgap) * 1, btn_y, bw, bh2)
+    export_rect = pygame.Rect(sw - (bw + bgap) * 6, btn_y, bw, bh2)
+    import_rect = pygame.Rect(sw - (bw + bgap) * 5, btn_y, bw, bh2)
+    play_rect   = pygame.Rect(sw - (bw + bgap) * 4, btn_y, bw, bh2)
+    save_rect   = pygame.Rect(sw - (bw + bgap) * 3, btn_y, bw, bh2)
+    clear_rect  = pygame.Rect(sw - (bw + bgap) * 2, btn_y, bw, bh2)
+    back_rect   = pygame.Rect(sw - (bw + bgap) * 1, btn_y, bw, bh2)
 
-    for rect, label, bc in [(play_rect,  "JUGAR",   (0, 140, 70)),
-                             (save_rect,  "GUARDAR", (0, 80, 140)),
-                             (clear_rect, "LIMPIAR", (80, 80, 0)),
-                             (back_rect,  "VOLVER",  (80, 0, 0))]:
+    for rect, label, bc in [(export_rect, "EXPORTAR", (0,  100, 100)),
+                             (import_rect, "IMPORTAR", (100,  60,   0)),
+                             (play_rect,   "JUGAR",    (0,  140,  70)),
+                             (save_rect,   "GUARDAR",  (0,   80, 140)),
+                             (clear_rect,  "LIMPIAR",  (80,  80,   0)),
+                             (back_rect,   "VOLVER",   (80,   0,   0))]:
         hov = rect.collidepoint(mpos)
         bs  = pygame.Surface((bw, bh2), pygame.SRCALPHA)
         bs.fill((*bc, 210 if hov else 140))
@@ -668,8 +687,8 @@ def draw_editor(surf, font, small_font, grid, sel_tile, tick, mouse_cell,
     except Exception:
         tf2 = small_font
     surf.blit(tf2.render(
-        "Clic: pintar  |  Rueda ratón: cambiar tile  |  1-8: palette", True, (50, 80, 90)),
+        "Clic: pintar  |  Rueda: cambiar tile  |  1-9,0: paleta", True, (50, 80, 90)),
         (8, sh - 18))
 
-    return play_rect, clear_rect, back_rect, save_rect
+    return play_rect, clear_rect, back_rect, save_rect, export_rect, import_rect
 
