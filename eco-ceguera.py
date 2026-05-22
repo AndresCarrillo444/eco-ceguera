@@ -494,6 +494,12 @@ class SonarPulse:
         cy = int(self.y - offset[1])
         if 0 < self.radius:
             th = SONAR_THICKNESS + (1 if hc else 0)
+            if not hc and self.radius > 5:
+                # Echolocation neon glow: draw outer circles with lower alpha (closer to black)
+                glow_col1 = lerp_color(BLACK, self.color, min(1.0, alpha_f * 0.35))
+                pygame.draw.circle(surf, glow_col1, (cx, cy), int(self.radius), th + 2)
+                glow_col2 = lerp_color(BLACK, self.color, min(1.0, alpha_f * 0.15))
+                pygame.draw.circle(surf, glow_col2, (cx, cy), int(self.radius), th + 4)
             pygame.draw.circle(surf, color, (cx, cy), int(self.radius), th)
 
 
@@ -1394,6 +1400,75 @@ def apply_glitch_lines(surf, glitch_lines):
             surf.blit(strip, (x_off, y_pos))
         except Exception:
             pass
+
+
+_vignette_grad = None
+
+def get_vignette_grad():
+    global _vignette_grad
+    if _vignette_grad is None:
+        # A smaller gradient surface to subtract from the mask
+        g_sz = 640
+        _vignette_grad = pygame.Surface((g_sz, g_sz), pygame.SRCALPHA)
+        center = g_sz // 2
+        _vignette_grad.fill((0, 0, 0, 0))
+        # Draw a white radial gradient
+        for r in range(g_sz // 2, 0, -4):
+            factor = 1.0 - (r / (g_sz // 2))
+            val = int(225 * (factor ** 2.0))
+            pygame.draw.circle(_vignette_grad, (val, val, val, val), (center, center), r)
+    return _vignette_grad
+
+def apply_proximity_vignette(game_surf, player, player2, off_x, off_y):
+    w, h = game_surf.get_size()
+    mask = pygame.Surface((w, h), pygame.SRCALPHA)
+    mask.fill((0, 0, 0, 230))  # dark darkness
+    
+    grad = get_vignette_grad()
+    g_w, g_h = grad.get_size()
+    
+    # Subtract for player 1
+    p1_cx = int(player.x - off_x)
+    p1_cy = int(player.y - off_y)
+    mask.blit(grad, (p1_cx - g_w // 2, p1_cy - g_h // 2), special_flags=pygame.BLEND_RGBA_SUB)
+    
+    # Subtract for player 2 if active
+    if player2:
+        p2_cx = int(player2.x - off_x)
+        p2_cy = int(player2.y - off_y)
+        mask.blit(grad, (p2_cx - g_w // 2, p2_cy - g_h // 2), special_flags=pygame.BLEND_RGBA_SUB)
+        
+    game_surf.blit(mask, (0, 0))
+
+def init_eco_sparks(wall_grid):
+    sparks = []
+    if not wall_grid:
+        return sparks
+    rows = len(wall_grid)
+    cols = len(wall_grid[0])
+    # Find all empty floor cells
+    floors = []
+    for r in range(rows):
+        for c in range(cols):
+            if not wall_grid[r][c]:
+                floors.append((r, c))
+    # Place particles in floors
+    num_particles = min(220, len(floors) * 5)
+    for _ in range(num_particles):
+        if not floors:
+            break
+        r, c = random.choice(floors)
+        px = c * TILE + random.randint(4, TILE - 4)
+        py = r * TILE + random.randint(4, TILE - 4)
+        sparks.append({
+            'x': px,
+            'y': py,
+            'alpha': 0.0,
+            'color': (0, 220, 255),
+            'size': random.uniform(1.2, 2.5),
+            'flicker_phase': random.uniform(0, 10)
+        })
+    return sparks
 
 
 class Player:
@@ -2657,6 +2732,12 @@ async def main():
 
     #  Game state placeholders 
     walls = enemies = player = pulses = exit_rect = traps = wall_grid = None
+    eco_sparks = []
+    walk_ripples = []
+    shake_intensity = 0
+    shake_timer = 0
+    shake_offset_x = 0
+    shake_offset_y = 0
     decoys = micro_pulse_timer = tick = 0
     lv_timer = trap_respawn_cd = blackout_cd = 0
     mech = active_cfg = None
@@ -2920,6 +3001,8 @@ async def main():
                 shockwave_cooldown = 0
                 score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                 player2 = Player2(player.x + TILE, player.y) if coop_enabled else None
+                eco_sparks = init_eco_sparks(wall_grid)
+                walk_ripples = []
                 paused = False; pause_origin = 'ls'; state = 'play'
                 play_sfx('start'); music_set_state('play')
 
@@ -2956,6 +3039,8 @@ async def main():
                 shockwave_cooldown = 0
                 score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                 player2 = Player2(player.x + TILE, player.y) if coop_enabled else None
+                eco_sparks = init_eco_sparks(wall_grid)
+                walk_ripples = []
                 paused = False; pause_origin = 'ls'; state = 'play'
                 play_sfx('start'); music_set_state('play')
 
@@ -3196,6 +3281,8 @@ async def main():
                             shockwave_cooldown = 0
                             score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
                             player2 = None
+                            eco_sparks = init_eco_sparks(wall_grid)
+                            walk_ripples = []
                             paused = False; pause_origin = 'editor'
                             state = 'play'
                         elif sr.collidepoint(mpos):
@@ -3356,6 +3443,8 @@ async def main():
                     passive_eco_timer = 0
                     shockwave_cooldown = 0
                     score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
+                    eco_sparks = init_eco_sparks(wall_grid)
+                    walk_ripples = []
                     paused = False
                 # New: Q toggles rock-throw mode
                 if ev.key == pygame.K_q and not paused:
@@ -3384,6 +3473,8 @@ async def main():
                         shockwaves.append(SonicShockwave(player.x, player.y))
                         shockwave_cooldown = SHOCKWAVE_COOLDOWN
                         play_sfx("sonar")
+                        shake_intensity = 10
+                        shake_timer = 25
             # Mouse: clic en botones de derrota
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and player.caught:
                 cx_d, cy_d = W // 2, H // 2
@@ -3408,6 +3499,8 @@ async def main():
                     passive_eco_timer = 0
                     shockwave_cooldown = 0
                     score = 0; pulse_count = 0; game_ticks = 0; sfx_played = False
+                    eco_sparks = init_eco_sparks(wall_grid)
+                    walk_ripples = []
                 elif m_rect_d.collidepoint(ev.pos):  # Menú
                     state = 'ls'; ls_tick = 0
             # Mouse: sonar / decoy / rock
@@ -3464,6 +3557,16 @@ async def main():
             if dx or dy:
                 ndx, ndy = normalize(dx, dy)
                 player.move(ndx, ndy, walls, sneaking)
+                if tick % 15 == 0:
+                    r_col = (255, 255, 255) if cfg_settings.get("high_contrast", False) else (0, 180, 255)
+                    walk_ripples.append({
+                        'x': player.x,
+                        'y': player.y,
+                        'radius': 2.0,
+                        'max_radius': 24.0,
+                        'color': r_col,
+                        'alpha': 1.0
+                    })
                 if not sneaking and not in_noise:
                     micro_pulse_timer += 1
                     if micro_pulse_timer >= MICRO_PULSE_INTERVAL:
@@ -3487,6 +3590,16 @@ async def main():
         if player2 and not player.caught and not player.won:
             keys2 = pygame.key.get_pressed()
             moved2, sneak2 = player2.handle_keys(keys2, walls)
+            if moved2 and tick % 15 == 0:
+                r_col = (255, 255, 255) if cfg_settings.get("high_contrast", False) else (255, 120, 0)
+                walk_ripples.append({
+                    'x': player2.x,
+                    'y': player2.y,
+                    'radius': 2.0,
+                    'max_radius': 24.0,
+                    'color': r_col,
+                    'alpha': 1.0
+                })
             if moved2 and not sneak2:
                 micro_pulse_timer2 += 1
                 if micro_pulse_timer2 >= MICRO_PULSE_INTERVAL:
@@ -3545,6 +3658,8 @@ async def main():
             play_sfx("lose")
             sfx_played = True
             music_set_state("lose")
+            shake_intensity = 15
+            shake_timer = 35
 
         if not paused:
             if shockwave_cooldown > 0:
@@ -3572,7 +3687,11 @@ async def main():
             if not player.caught and not player.won:
                 for e in enemies:
                     res = e.update(walls, player, enemies, wall_grid)
-                    if res is not None: pulses.append(res)
+                    if res is not None:
+                        pulses.append(res)
+                        if isinstance(e, ScreamerEnemy):
+                            shake_intensity = 12
+                            shake_timer = 30
                 for e in enemies:
                     if isinstance(e, HeavyEnemy):
                         for p in pulses:
@@ -3585,6 +3704,8 @@ async def main():
                         pulses.append(tp)
                         for e in enemies: e.alert(trap.cx, trap.cy)
                         play_sfx("trap")
+                        shake_intensity = 8
+                        shake_timer = 20
 
                 # NEW: floor hazards
                 sneaking_now = pygame.key.get_pressed()[pygame.K_LSHIFT] or \
@@ -3636,6 +3757,40 @@ async def main():
                         new_shockwaves.append(sw)
                 shockwaves = new_shockwaves
 
+                # Update walk ripples
+                for r_rip in walk_ripples:
+                    r_rip['radius'] += 0.8
+                    r_rip['alpha'] = 1.0 - (r_rip['radius'] / r_rip['max_radius'])
+                walk_ripples = [r_rip for r_rip in walk_ripples if r_rip['alpha'] > 0]
+
+                # Update eco sparks near pulse wave fronts
+                for p in pulses:
+                    if p.dead:
+                        continue
+                    for spark in eco_sparks:
+                        d = math.hypot(spark['x'] - p.x, spark['y'] - p.y)
+                        if abs(d - p.radius) < SONAR_SPEED + 1:
+                            if spark['alpha'] < 0.5:
+                                spark['alpha'] = 1.0
+                                spark['color'] = p.color
+
+                # Fade eco sparks
+                for spark in eco_sparks:
+                    if spark['alpha'] > 0:
+                        spark['alpha'] -= 0.02
+                        if spark['alpha'] < 0:
+                            spark['alpha'] = 0.0
+
+                # Update screen shake
+                shake_offset_x = 0
+                shake_offset_y = 0
+                if shake_timer > 0:
+                    shake_timer -= 1
+                    shake_offset_x = random.randint(-shake_intensity, shake_intensity)
+                    shake_offset_y = random.randint(-shake_intensity, shake_intensity)
+                    if shake_timer == 0:
+                        shake_intensity = 0
+
                 # NEW: heartbeat sound and frequency updates
                 n_alert = sum(1 for e in enemies if hasattr(e, 'alert_t') and e.alert_t > 0)
                 if n_alert > 0:
@@ -3685,6 +3840,25 @@ async def main():
             pygame.draw.rect(game_surf, col, er)
             pygame.draw.rect(game_surf, GOLD, er, 2)
 
+        # Draw walk ripples
+        for r_rip in walk_ripples:
+            rcx = int(r_rip['x'] - off_x)
+            rcy = int(r_rip['y'] - off_y)
+            if 0 <= rcx <= VIEW_W and 0 <= rcy <= VIEW_H:
+                r_color = lerp_color(BLACK, r_rip['color'], r_rip['alpha'] * 0.7)
+                pygame.draw.circle(game_surf, r_color, (rcx, rcy), int(r_rip['radius']), 1)
+
+        # Draw eco sparks
+        for spark in eco_sparks:
+            if spark['alpha'] > 0:
+                f_val = math.sin(tick * 0.15 + spark['flicker_phase']) * 0.2 + 0.8
+                spark_alpha = min(1.0, max(0.0, spark['alpha'] * f_val))
+                sp_col = lerp_color(BLACK, spark['color'], spark_alpha * 0.85)
+                sp_cx = int(spark['x'] - off_x)
+                sp_cy = int(spark['y'] - off_y)
+                if 0 <= sp_cx <= VIEW_W and 0 <= sp_cy <= VIEW_H:
+                    pygame.draw.circle(game_surf, sp_col, (sp_cx, sp_cy), int(spark['size']))
+
         for trap in traps: trap.draw(game_surf, offset)
         for fh in floor_hazards: fh.draw(game_surf, offset)
         for nz in noise_zones:   nz.draw(game_surf, offset)
@@ -3698,6 +3872,9 @@ async def main():
         player.draw(game_surf, offset)
         if player2:
             player2.draw(game_surf, offset)
+
+        # Apply soft vignette
+        apply_proximity_vignette(game_surf, player, player2, off_x, off_y)
 
         # Apply Chromatic Aberration & Glitch effects to game_surf before blitting to screen
         threat_level = 0.0
@@ -3738,7 +3915,7 @@ async def main():
         if glitch_strips:
             apply_glitch_lines(game_surf, glitch_strips)
 
-        screen.blit(game_surf, (0, HUD_TOP))
+        screen.blit(game_surf, (shake_offset_x, HUD_TOP + shake_offset_y))
 
         alert_count = sum(1 for e in enemies if e.alert_t > 0)
 
