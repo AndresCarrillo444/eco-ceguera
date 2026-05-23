@@ -26,6 +26,14 @@ Para poder correr el juego de forma óptima, necesitas:
 
 ## 🚀 Instalación y Uso
 
+### Opción 1: Ejecutable para Windows (¡Nuevo!)
+La forma más rápida de jugar si estás en Windows:
+1. Ve a la carpeta `dist/` en este repositorio.
+2. Descarga el archivo **`EcoCeguera.exe`**.
+3. Haz doble clic para jugar (no necesitas instalar Python ni ninguna librería).
+
+### Opción 2: Código Fuente
+Si prefieres correrlo desde el código o usas otro sistema operativo:
 1. **Clonar el repositorio:**
    ```bash
    git clone https://github.com/AndresCarrillo444/eco-ceguera.git
